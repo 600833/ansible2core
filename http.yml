@@ -1,0 +1,7 @@
+---
+#webservers playbook
+- hosts: webservers
+  vars:
+   appli: "webserver production"
+  roles:
+  - http

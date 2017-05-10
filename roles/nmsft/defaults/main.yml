@@ -1,0 +1,15 @@
+---
+# defaults file for http
+archive_src: /home/lb16096/developpment/livraisons/NIMSOFT-AGENT_7.7.3.2_1.1_LINUX_7_GEN.tar
+archive_dst: /home/lb16096/developpment/staging/NIMSOFT-AGENT_7.7.3.2_1.1_LINUX_7_GEN.tar
+tarfile: "{{ archive_dst|regex_replace('(.*)/([^/]+)$','\\2') }}"
+dire: "{{ archive_dst|regex_replace('(.*)/([^/]+)$','\\1') }}"
+tardir: "{{dire+'/'+tarfile|regex_replace('(.*)\\.([^\\.]+$)','\\1')}}"
+install_dir: /home/lb16096/developpment/install
+install_script: nimsoft_install
+install_script_source: nimsoft_install
+refpack_lin: /home/lb16096/developpment/RefPack_LIN
+package_file: /home/lb16096/developpment/RefPack_LIN/NIMSOFT-AGENT_7.7.3.2_1.1_LINUX_7_GEN.tar
+sha_version: 7.7.3.2_1.1
+delete_scripts_list:
+ - Install_AGT-NIMSOFT_MAN.ksh

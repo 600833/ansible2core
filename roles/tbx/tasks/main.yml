@@ -1,0 +1,63 @@
+---
+-    name: 'test'
+     shell: echo "{{ansible_all_ipv4_addresses}}"
+     register: res_test
+-    name: 'copy package'
+     copy:
+      src: "{{archive_src}}"
+      dest: "{{archive_dst}}"
+      owner: "{{user1}}"
+      mode: "{{mode1}}"
+#     changed_when: true
+     register: res_copy_package
+     notify:
+     - uncompress package
+-    meta: flush_handlers
+-    name: 'copy tbx_install'
+     copy:
+      src: "{{install_dir+'/'+install_script_source}}"
+      dest: "{{tardir+'/'+install_script}}"
+      owner: "{{user1}}"
+      mode: "0755"
+-    name: delete original install scripts
+     file:
+      path: "{{tardir}}/{{item}}"
+      state: absent
+     with_items: "{{delete_scripts_list}}"
+-    name: build puppetrun.tgz
+     shell: (cd  ../../; tar czf - puppetrun --exclude 'puppetrun/.git'  --exclude 'bp2i_tsmclient' --exclude 'bp2i_nmsft' --exclude 'bp2i_nmsft.yaml' --exclude 'bp2i_tsmclient.yaml') > puppetrun.tgz
+     args:
+      chdir: "{{tardir}}"
+-    name: write package signature
+     copy:
+      dest: "{{tardir}}/PACKAGING.info"
+      mode: '0644'
+      owner: "{{user1}}"
+      content: "packaging of ${racine} is built at {{ansible_date_time.iso8601}}\n"
+-    name: write version file
+     copy:
+      dest: "{{tardir}}/SHA_VERSION.info"
+      mode: "0644"
+      owner: "{{user1}}"
+      content: "{{sha_version}}"
+-    name: archive package
+     archive:
+      format: gz
+      path: "{{tardir}}"
+      dest: "{{package_file}}"
+-    name: copy install_script to RefPack_LIN
+     copy:
+      remote_src: true
+      src: "{{item.src}}"
+      dest: "{{item.dest}}"
+      mode: "0644"
+     with_items:
+      - {'src' : "{{tardir}}/{{install_script}}",'dest':"{{refpack_lin}}/{{install_script}}"}
+      - {'src' : "{{tardir}}/puppetrun.tgz",'dest':"{{refpack_lin}}/puppetrun.tgz"}
+-    name: delete staging file
+     file:
+      path: "{{item}}"
+      state: absent
+     with_items:
+     - "{{tardir}}"
+     - "{{archive_dst}}"

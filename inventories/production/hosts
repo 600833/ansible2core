@@ -1,0 +1,9 @@
+[grp1]
+sichuan ya=nera gx=2567
+foreman ya=aero gx=2345
+[grp1:vars]
+jspx1=enfants
+[webservers]
+server1
+[tsm]
+10.250.183.38

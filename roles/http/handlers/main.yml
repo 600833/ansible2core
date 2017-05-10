@@ -1,0 +1,9 @@
+---
+-    name: restart apache
+     service:
+      name: httpd
+      state: restarted    
+-    name: reg_config_chgt
+     copy:
+      src: http_demarrage.txt
+      dest: /tmp/http_demarrage.txt

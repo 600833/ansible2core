@@ -1,0 +1,16 @@
+---
+# defaults file for http
+archive_src: /home/lb16096/developpment/livraisons/TSM_BA_7.1.4.4_1.1_RHEL7_6.tar
+archive_dst: /home/lb16096/developpment/staging/TSM_BA_7.1.4.4_1.1_RHEL7_6.tar
+tarfile: "{{ archive_dst|regex_replace('(.*)/([^/]+)$','\\2') }}"
+dire: "{{ archive_dst|regex_replace('(.*)/([^/]+)$','\\1') }}"
+tardir: "{{dire+'/'+tarfile|regex_replace('(.*)\\.([^\\.]+$)','\\1')}}"
+install_dir: /home/lb16096/developpment/install
+tsmclient_install_script: tsmclient_install
+tsmclient_install_script_source: tsmclient_install
+refpack_lin: /home/lb16096/developpment/RefPack_LIN
+fooo:
+ fd1:  un
+ fd2:  deux
+package_file: /home/lb16096/developpment/RefPack_LIN/TSM_BA_7.1.4.4_1.1_RHEL7_6.tar
+sha_version: 7.1.4.4_1.1

@@ -1,0 +1,5 @@
+---
+- name: tsm package build
+  hosts: 10.250.183.38
+  roles:
+  - tsm

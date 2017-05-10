@@ -1,0 +1,4 @@
+---
+# <ansible_base_dir>/group_vars/webservers
+protoc: http2
+porte: 8107

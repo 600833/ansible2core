@@ -1,0 +1,12 @@
+---
+- hosts: foreman
+  gather_facts: True
+  vars:
+   foo: abc123
+   fee: xyz
+  tasks:
+   - name: 'test'
+     debug:
+      msg:   "{{jspx1}}"
+     register: resu
+ 

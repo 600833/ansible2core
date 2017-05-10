@@ -1,0 +1,349 @@
+#!/usr/bin/python
+import os,time,sys,getopt,re,json,socket,urllib2,distutils.dir_util,tarfile,shutil,subprocess
+#
+#afficher le mode d'emploi de la commande
+#
+def usage():
+ print """
+Usage: tsmclient_install [OPTIONS...]
+
+Required Options
+  --version              tsmclient version number ex 7.1.4
+  --instance_sys         tsm instance name for system backup
+  --ip_sys               servername or ip for system instance
+  --port_sys             tcp port of system instance
+  --node_sys             tsm nodename on system instance
+  --instance_app         tsm instance name for application backup
+  --ip_app               servername or ip for application instance
+  --port_app             tcp port of application instance
+  --node_app             tsm nodename on application instance
+
+Optional options:
+  --node_w                configuration of hebdo node for some cloud servers
+
+Attention option values are case-sensitive
+ """
+opt1="""
+Optional options:
+  --metier               OTHER|BNL
+  --zone                 INTRANET|DMZ|PRZ
+  --site                 MARNE_NORTH|MARNE_EAST|VAUDREUIL|ITALY
+  --prod                 PROD|NOPROD
+  --pilote               YES|NO
+  --quot                 DNONE|DBASIC|DREGULAR|LEGACY
+  --hebdo               WNONE|WBASIC|WREGULAR|LEGACY
+  --dev                 install from kickstart-dev
+"""
+
+#
+#lire http get
+#
+def http_get(url):
+ nomfichier=url.split('/')[-1]
+ p_input=urllib2.urlopen(url)
+ p_output=open(nomfichier,'wb')
+ meta=p_input.info()
+ taillefichier = int(meta.getheaders("Content-Length")[0])
+ print "Downloading {0} of {1} bytes to local file: {2}".format(url, taillefichier,nomfichier)
+ blocksz=8192
+ nb_bytes=0
+ while True:
+  buf=p_input.read(blocksz)
+  if not buf:
+   break
+  p_output.write(buf)
+  nb_bytes += len(buf)
+ p_output.close()
+ p_input.close()
+ print "Downloading complete. {0} bytes read".format(nb_bytes)
+ if os.path.exists(nomfichier):
+  return os.path.abspath(nomfichier)
+ else:
+  raise IOError(nomfichier+" is not found")
+#
+#
+#
+def replace_file(old,new,file_name):
+ with open(file_name,"r") as pfile:
+  file_text=pfile.read()
+  new_fil_text=re.sub(old,new,file_text)
+ with open(file_name,"w") as pfile:
+  pfile.write(new_fil_text)
+#
+#get return code of puppet run
+#
+def puppet_returncode():
+ try:
+  get_logdir_command='puppet config print logdir --config puppet.conf'
+  ps1=subprocess.Popen(get_logdir_command.split(),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  logdir,logdir_err=ps1.communicate()
+  if ps1.returncode != 0:
+   raise RuntimeError('puppet logdir can not be determined')
+  logdir=logdir.strip()
+  run_summary_file=os.path.join(logdir,os.path.pardir,'state','last_run_summary.yaml')
+  run_summary_file=os.path.abspath(run_summary_file)
+  with open(run_summary_file) as pf:
+   run_summary_text=pf.read()
+  re1=re.search(r'^  resources:.+?failed: (\d+?)\n',run_summary_text,re.DOTALL|re.MULTILINE)
+  if re1 != None:
+   fail=re1.group(1)
+  else:
+   raise RuntimeError('puppet run failed can not be determined')
+  fail=int(fail)
+ except RuntimeError:
+  return 111
+ else:
+  pass
+ return fail
+#
+#main program
+#
+#commandline
+#
+print "commandline args: ",str(sys.argv)
+#
+#initial parameters
+#
+script_path=os.path.abspath(sys.argv[0])
+print "used script: ",script_path
+opt_long=["instance_sys=","ip_sys=","port_sys=","node_sys=","instance_app=","ip_app=","port_app=","node_app=","node_w","register","metier=","zone=","site=","prod=","pilote=","quot=","hebdo=","help","version=","debug","uninstall","integrated=","downloaded","dev"]
+params={"puppet_source": "http://kickstart-dev:8000/kickstart/RedHat_7.0AS/x86_64/Src/RefPack_LIN/puppetrun.tgz",
+"package_source": "http://kickstart-dev:8000/kickstart/RedHat_7.0AS/x86_64/Src/RefPack_LIN/TSM_BA_7144_RHEL7.tar",
+"working_dir":"/apps/Deploy/installzone",
+"deploy_dir":"/apps/Deploy",
+"kickstart_servers_list":{
+ "it": "kickstart-it.it.net.intra",
+ "fr": "kickstart-prod.fr.net.intra",
+ "dev": "kickstart-dev.fr.net.intra"},
+"freespace":500000000,
+"uninstall":"""
+systemctl stop dsmcad_sys
+systemctl disable dsmcad_sys
+sleep 5
+systemctl status dsmcad_sys
+rpm -e TIVsm-BA TIVsm-API64 gskssl64 gskcrypt64
+rm -rf  /var/lib/puppet_inventory/*
+umount /opt/tivoli/tsm
+rm -rf /apps/Deploy/TSM* /apps/Deploy/tsmlinuxsha.tgz
+lvremove -f /dev/rootvg/lv_tsmba
+sed -i.bak '/^\/dev\/rootvg\/lv_tsmba/d' /etc/fstab
+sleep 10
+"""
+}
+#
+#get options from commandline
+#
+choix={"instance_sys":"","ip_sys":"","port_sys":"","node_sys":"","instance_app":"","ip_app":"","port_app":"","node_app":""}
+choix2={"metier":"","zone":"","site":"","prod":"","pilote":"","quot":"","hebdo":""}
+opt_short=""
+try:
+ opt_list,prog_arg=getopt.gnu_getopt(sys.argv[1:],opt_short,opt_long)
+except getopt.GetoptError as e:
+ print "### commandline argument error: [{0}]".format(str(e))
+ usage()
+ raise e
+print 'parsed options :', opt_list
+dopt_list={}
+for k,v in dict(opt_list).items():
+ dopt_list[re.sub(r'^-{1,2}','',k)]=v
+print "splitted options: ",dopt_list
+#
+#uninstall
+#
+if 'uninstall' in dopt_list.keys():
+ exit_status=os.system(params['uninstall'])
+ sys.exit(exit_status)
+#
+#help
+#
+if 'help' in dopt_list.keys():
+ usage()
+ sys.exit(0)
+#
+#calculate choix
+#
+if "register" in dopt_list.keys():
+ try:
+  for cx in choix2.keys():
+   choix2[cx]=dopt_list[cx]
+  choix=choix2
+ except KeyError as e:
+  print 'option %s is missing' % str(e)
+  raise e
+else:
+ try:
+  for cx in choix.keys():
+   choix[cx]=dopt_list[cx]
+  if "metier" not in dopt_list.keys(): dopt_list["metier"] = "OTHER"
+  if "node_w" in dopt_list.keys():
+   choix['node_w']='y'
+  else:
+   choix['node_w']='n'
+
+ except KeyError as e:
+  print 'option %s is missing' % str(e)
+  raise e
+print 'final choice',choix
+#
+#change params
+#
+if 'dev' in dopt_list.keys():
+ params["puppet_source"]="http://kickstart-dev:8000/kickstart/RedHat_7.0AS/x86_64/Src/RefPack_LIN/puppetrun.tgz"
+ params["package_source"]="http://kickstart-dev:8000/kickstart/RedHat_7.0AS/x86_64/Src/RefPack_LIN/TSM_BA_7144_RHEL7.tar"
+elif dopt_list["metier"].upper()=="BNL":
+ params["puppet_source"]="http://kickstart-it:8000/kickstart/RedHat_7.0AS/x86_64/Src/RefPack_LIN/puppetrun.tgz"
+ params["package_source"]="http://kickstart-it:8000/kickstart/RedHat_7.0AS/x86_64/Src/RefPack_LIN/TSM_BA_7144_RHEL7.tar"
+else:
+ params["puppet_source"]="http://kickstart-prod:8000/kickstart/RedHat_7.0AS/x86_64/Src/RefPack_LIN/puppetrun.tgz"
+ params["package_source"]="http://kickstart-prod:8000/kickstart/RedHat_7.0AS/x86_64/Src/RefPack_LIN/TSM_BA_7144_RHEL7.tar"
+#
+#installation
+#
+script_path=os.path.abspath(sys.argv[0])
+script_base=os.path.basename(script_path)
+script_dir=os.path.dirname(script_path)
+if os.path.exists(script_dir+"/PACKAGING.info"):
+ print 'package has been downloaded. run installer from local package'
+ new_script_path=params['deploy_dir']+"/"+script_base
+ with open(script_dir+"/PACKAGING.info") as pf:
+  package_info=pf.read()
+  print "package downloaded %s" % package_info
+ shutil.copy(script_path,new_script_path)
+ os.chmod(new_script_path,0700)
+ new_arg_list=sys.argv[0:]
+ new_arg_list.append('--integrated')
+ new_arg_list.append(script_dir+"/puppetrun.tgz")
+ new_arg_list.append('--downloaded')
+ print 'new arg list: {0}'.format(new_arg_list)
+ os.chdir(params['deploy_dir'])
+ print 'spawn new installer process'
+ os.execv(new_script_path,new_arg_list)
+else:
+ print 'package need to be downloaded'
+
+
+print 'process id:', os.getpid()
+#
+#checking space
+#
+fs_deploy=os.statvfs(params['deploy_dir'])
+print 'checking space available'
+if 'integrated' in dopt_list.keys():
+ if fs_deploy.f_bsize * fs_deploy.f_bavail < 10000000:
+  print '{0} has low free space : {1} megabytes '.format(params['deploy_dir'],fs_deploy.f_bsize * fs_deploy.f_bavail/1024/1024)
+  sys.exit(-1)
+ else:
+  print '{0} has  {1} megabytes free'.format(params['deploy_dir'],fs_deploy.f_bsize * fs_deploy.f_bavail/1024/1024)
+else:
+ if fs_deploy.f_bsize * fs_deploy.f_bavail < params['freespace']:
+  print '{0} has low free space : {1} megabytes '.format(params['deploy_dir'],fs_deploy.f_bsize * fs_deploy.f_bavail/1024/1024)
+  sys.exit(-1)
+ else:
+  print '{0} has  {1} megabytes free'.format(params['deploy_dir'],fs_deploy.f_bsize * fs_deploy.f_bavail/1024/1024)
+#
+#go to working directory
+#
+distutils.dir_util.mkpath(params["working_dir"],mode=0755,verbose=1)
+os.chdir(params["working_dir"])
+print "working directory: ",os.getcwd()
+
+try:
+ target_version=dopt_list['version']
+except KeyError as e:
+ print 'Option %s is missing' % str(e)
+ usage()
+ raise e
+else:
+ print 'target_version: ',target_version
+#
+#get installer puppet
+#
+if 'integrated' in dopt_list.keys():
+ if os.path.exists(dopt_list['integrated']):
+  puppet_archive=dopt_list['integrated']
+ else:
+  raise IOError("installer {0} missing!".format(dopt_list['integrated']))
+else:
+ puppet_archive=http_get(params["puppet_source"])
+
+p_tf=tarfile.open(puppet_archive)
+print "Extracting {0}".format(puppet_archive)
+p_tf.extractall()
+p_tf.close()
+#
+#configuring puppet setting hiera.yaml ...
+#
+print 'configuring puppet setting'
+os.chdir(params["working_dir"]+"/puppetrun")
+for fl in ("hiera.yaml","puppet.conf","run_tbx.sh","run_nmsft.sh","run_tsmclient.sh","local/modules/bp2i_utilities/manifests/init.pp"):
+ replace_file('/root/puppetrun',params["working_dir"]+"/puppetrun",fl)
+#
+#install options
+#
+hiera_input={'produits':{'tsmclient':{'target_package_version':target_version,'register':choix}}}
+if 'dev' in dopt_list.keys():
+ hiera_input['kickstartserver']=params["kickstart_servers_list"]["dev"]
+elif dopt_list['metier'].upper()=='OTHER':
+ hiera_input['kickstartserver']=params["kickstart_servers_list"]["fr"]
+else:
+ hiera_input['kickstartserver']=params["kickstart_servers_list"]["it"]
+hote=socket.getfqdn()
+print 'fqdn of host: ',hote
+print 'install options:'
+print json.dumps(hiera_input,sort_keys=True,indent=4)
+with open("local/hiera/sha/nodes/"+hote+".json","w") as pfile:
+ pfile.write(json.dumps(hiera_input,sort_keys=True,indent=4))
+#print "ending for test"
+#sys.exit(0)
+#
+#run puppet
+#
+print "\n\n### run puppet prerequisites"
+proc_exit=os.system('puppet apply --detailed-exitcodes prerun.pp --config puppet.conf')
+if os.WEXITSTATUS(proc_exit) == 1:
+ print 'catalog compiling error'
+ sys.exit(proc_exit)
+exit_status=puppet_returncode()
+print 'exit_status: ',exit_status
+if exit_status !=0:
+ sys.exit(exit_status)
+
+#os.system('puppet config print --config puppet.conf')
+print "\n\n### run puppet install"
+proc_exit=os.system('puppet apply --detailed-exitcodes main_tsmclient.pp --config puppet.conf')
+if os.WEXITSTATUS(proc_exit) == 1:
+ print 'catalog compiling error'
+ sys.exit(proc_exit)
+exit_status=puppet_returncode()
+print 'exit_status: ',exit_status
+if exit_status !=0:
+ sys.exit(exit_status)
+
+print "\n\n### run puppet clean"
+proc_exit=os.system('puppet apply --detailed-exitcodes main_tsmclient.pp --config puppet.conf')
+if os.WEXITSTATUS(proc_exit) == 1:
+ print 'catalog compiling error'
+ sys.exit(proc_exit)
+exit_status=puppet_returncode()
+print 'exit_status: ',exit_status
+if exit_status !=0:
+ sys.exit(exit_status)
+
+print "\n\n### run puppet prerun"
+proc_exit=os.system('puppet apply --detailed-exitcodes main_tsmclient.pp --config puppet.conf')
+if os.WEXITSTATUS(proc_exit) == 1:
+ print 'catalog compiling error'
+ sys.exit(proc_exit)
+exit_status=puppet_returncode()
+print 'exit_status: ',exit_status
+if exit_status !=0:
+ sys.exit(exit_status)
+#
+#debug
+#
+if "debug" not in  dopt_list.keys():
+ print "cleaning"
+ shutil.rmtree(params["working_dir"])
+ if not re.match(r'.*-$',script_path):
+  os.remove(script_path)
+print "install completed"

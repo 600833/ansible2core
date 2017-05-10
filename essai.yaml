@@ -1,0 +1,16 @@
+---
+#essai divers
+- name: essai divers
+  hosts: 10.250.183.38
+  vars:
+   scripts_list:
+   - Uninst_IPS_TOOLBOXES_MAN.ksh
+   - Install_IPS_TOOLBOXES_MAN.ksh
+  tasks:
+  - name: essai
+    debug:
+     msg: "{{item}}"
+    with_items: "{{scripts_list}}"
+
+
+

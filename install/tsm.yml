@@ -1,0 +1,38 @@
+---
+- hosts: sichuan
+  vars:
+   archive_src: /home/lb16096/developpment/livraisons/TSM_BA_7.1.4.4_1.1_RHEL7_6.tar
+   archive_dst: /home/lb16096/developpment/staging/TSM_BA_7.1.4.4_1.1_RHEL7_6.tar
+   tarfile: "{{ archive_dst|regex_replace('(.*)/([^/]+)$','\\2') }}"
+   dire: "{{ archive_dst|regex_replace('(.*)/([^/]+)$','\\1') }}"
+   tardir: "{{dire+'/'+tarfile|regex_replace('(.*)\\.([^\\.]+$)','\\1')}}"
+   install_dir: /home/lb16096/developpment/install
+   user1: papa 
+   mode1: 0644
+   tsmclient_install_script: tsmclient_install
+   fooo:
+    fd1:  un
+    fd2:  deux
+  tasks:
+   - name: 'test'
+     shell: echo "{{ansible_all_ipv4_addresses}}"
+     register: res_test
+   - name: 'copy package'
+     copy:
+      src: "{{archive_src}}"
+      dest: "{{archive_dst}}"
+      owner: "{{user1}}"
+      mode: "{{mode1}}"
+#     changed_when: true
+     register: res_copy_package
+   - name: 'uncompress package'
+     command: tar xvf "{{tarfile}}"
+     args:
+      chdir: "{{dire}}"
+     when: res_copy_package.changed
+   - name: 'copy tsmclient_install'
+     copy:
+      src: "{{install_dir+'/'+tsmclient_install_script}}"
+      dest: "{{tardir+'/'+tsmclient_install_script}}"
+      owner: "{{user1}}"
+      mode: "{{mode1}}"

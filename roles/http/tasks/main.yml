@@ -1,0 +1,24 @@
+---
+-    name: debug1
+     debug:
+      msg: "{{porte}}"
+-    name: http conf
+     template:
+      src: httpd.conf.j2
+      dest: /etc/httpd/conf/httpd.conf
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+     notify:
+      - restart apache
+      - reg_config_chgt
+-    name: used_ports
+     shell: /usr/bin/netstat -tnpla 
+     register: res_proc
+-    name: debug2
+     debug:
+      var: res_proc
+     when: ( res_proc.stdout|search('http'))
+-    fail: msg="Pas de http demon"
+     when: ( not res_proc.stdout|search('http'))

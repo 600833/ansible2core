@@ -1,0 +1,8 @@
+---
+- hosts: server1
+  vars:
+   porte: 10080
+  tasks: 
+  - include: http_tasks.yaml
+  handlers: 
+  - include: http_handlers.yaml

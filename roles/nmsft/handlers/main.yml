@@ -1,0 +1,6 @@
+---
+#roles/tsm/handlers/main.yml
+-    name: 'uncompress package'
+     command: tar xvf "{{tarfile}}"
+     args:
+      chdir: "{{dire}}"
